@@ -14,20 +14,26 @@ import {
 import { CreateEventDto } from './create-event.dto';
 import { UpdateEventDto } from './update-event.dto';
 import { Event } from './event.entity';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 
 @Controller('/events')
 export class EventsController {
-  private events: Event[] = [];
+  constructor(
+    @InjectRepository(Event)
+    private readonly repository: Repository<Event>,
+  ) {}
 
   @Get()
-  findaAll() {
-    return this.events;
+  async findaAll() {
+    return this.repository.find();
   }
 
   @Get(':id')
-  @HttpCode(200)
-  findOne(@Param('id') id) {
-    const event = this.events.find((event) => event.id === +id);
+  async findOne(@Param('id') id) {
+    const event = await this.repository.findOne({
+      where: { id: parseInt(id) },
+    });
     if (!event) {
       throw new HttpException(
         {
@@ -41,33 +47,51 @@ export class EventsController {
   }
 
   @Post()
-  create(@Body() input: CreateEventDto) {
-    const event = {
+  async create(@Body() input: CreateEventDto) {
+    return await this.repository.save({
       ...input,
-      id: this.events.length + 1,
       when: new Date(input.when),
-    };
-    this.events.push(event);
-    return event;
+    });
   }
 
   @Patch(':id')
-  update(@Param('id') id, @Body() input: UpdateEventDto) {
-    const index = this.events.findIndex((event) => event.id === +id);
-    const event = {
-      ...this.events[index],
-      ...input,
-      when: input.when ? new Date(input.when) : this.events[index].when,
-    };
-    this.events[index] = event;
+  async update(@Param('id') id, @Body() input: UpdateEventDto) {
+    const event = await this.repository.findOne({
+      where: { id: parseInt(id) },
+    });
+    if (!event) {
+      throw new HttpException(
+        {
+          status: HttpStatus.NOT_FOUND,
+          error: 'Event not found',
+        },
+        HttpStatus.NOT_FOUND,
+      );
+    }
 
-    return event;
+    return await this.repository.save({
+      ...event,
+      ...input,
+      when: input.when ? new Date(input.when) : event.when,
+    });
   }
 
   @Delete(':id')
   @HttpCode(204)
-  remove(@Param('id') id) {
-    const eventsFiltered = this.events.filter((event) => event.id !== +id);
-    this.events = eventsFiltered;
+  async remove(@Param('id') id) {
+    const event = await this.repository.findOne({
+      where: { id: parseInt(id) },
+    });
+    if (!event) {
+      throw new HttpException(
+        {
+          status: HttpStatus.NOT_FOUND,
+          error: 'Event not found',
+        },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    await this.repository.remove(event);
   }
 }
